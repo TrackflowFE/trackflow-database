@@ -5,7 +5,15 @@ Cada API trabaja solo con sus tablas; ninguna lee tablas de otra salvo las lectu
 referencia indicadas abajo.
 
 - Proyecto Supabase: `ksknhtmvhvlkutbfyfte` (org *Fabrica Escuela*, us-east-2)
-- Esquema completo: [`schema.sql`](schema.sql) (generado desde las migraciones V1–V22)
+| Archivo | Contenido |
+|---|---|
+| [`migrations/`](migrations) | Copia de las migraciones Flyway V1–V22 (fuente de verdad: repositorio de la API 1) |
+| [`schema.sql`](schema.sql) | Estructura final tras V1–V22: tablas, llaves, índices. Sin datos |
+| [`seed.sql`](seed.sql) | Catálogos que cargan las migraciones: 52 ciudades, 57 centros, 130 tramos de ruta |
+
+`schema.sql` + `seed.sql` sirven para levantar una copia local o revisar el modelo.
+En Supabase la base se crea arrancando la API 1 (Flyway corre `migrations/`); cargar
+estos archivos a mano dejaría la base sin historial de Flyway y la API 1 fallaría.
 
 ## Dueños de las tablas
 
@@ -107,15 +115,22 @@ TRACKFLOW_DB_PASSWORD=<clave>
   revoke all on all tables in schema public from anon, authenticated;
   ```
 
-## Regenerar `schema.sql`
-
-Con Docker, desde el repositorio del backend:
+## Copia local
 
 ```sh
-docker run -d --rm --name tf-db -e POSTGRES_PASSWORD=x -e POSTGRES_DB=trackflow postgres:17-alpine
-for f in $(ls src/main/resources/db/migration/*.sql | sort -V); do
-  docker exec -i tf-db psql -q -1 -U postgres -d trackflow < "$f"
+docker run -d --rm --name tf-db -e POSTGRES_PASSWORD=x -e POSTGRES_DB=trackflow -p 5432:5432 postgres:17-alpine
+for f in $(ls migrations/*.sql | sort -V); do
+  docker exec -i tf-db psql -q -1 -v ON_ERROR_STOP=1 -U postgres -d trackflow < "$f"
 done
+```
+
+## Regenerar `schema.sql` y `seed.sql`
+
+Tras copiar las migraciones nuevas a `migrations/` y levantar la copia local:
+
+```sh
 docker exec tf-db pg_dump -U postgres -d trackflow --schema-only --no-owner --no-privileges > schema.sql
+docker exec tf-db pg_dump -U postgres -d trackflow --data-only --inserts --no-owner \
+  -t cities -t logistics_centers -t logistics_route_legs > seed.sql
 docker rm -f tf-db
 ```
