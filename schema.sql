@@ -153,6 +153,7 @@ CREATE TABLE public.pickups (
     requested_by character varying(50) NOT NULL,
     requested_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    management_code_hash character varying(100),
     CONSTRAINT ck_pickups_weight CHECK ((weight_kg > (0)::numeric))
 );
 
@@ -324,6 +325,8 @@ CREATE INDEX idx_pickups_assigned ON public.pickups USING btree (assigned_userna
 CREATE INDEX idx_pickups_shipment ON public.pickups USING btree (shipment_tracking_number);
 
 CREATE INDEX idx_pickups_status ON public.pickups USING btree (status);
+
+CREATE UNIQUE INDEX uq_pickups_active_shipment ON public.pickups USING btree (shipment_tracking_number) WHERE (((status)::text <> 'CANCELLED'::text) AND (shipment_tracking_number IS NOT NULL));
 
 CREATE INDEX idx_reports_transit_delivered_at ON public.reports_shipment_transit USING btree (delivered_at);
 
