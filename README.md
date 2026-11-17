@@ -7,8 +7,8 @@ referencia indicadas abajo.
 - Proyecto Supabase: `ksknhtmvhvlkutbfyfte` (org *Fabrica Escuela*, us-east-2)
 | Archivo | Contenido |
 |---|---|
-| [`migrations/`](migrations) | Copia de las migraciones Flyway V1–V23 (fuente de verdad: repositorio de la API 1) |
-| [`schema.sql`](schema.sql) | Estructura final tras V1–V23: tablas, llaves, índices. Sin datos |
+| [`migrations/`](migrations) | Copia de las migraciones Flyway V1–V24 (fuente de verdad: repositorio de la API 1) |
+| [`schema.sql`](schema.sql) | Estructura final tras V1–V24: tablas, llaves, índices. Sin datos |
 | [`seed.sql`](seed.sql) | Catálogos que cargan las migraciones: 52 ciudades, 57 centros, 130 tramos de ruta |
 
 `schema.sql` + `seed.sql` sirven para levantar una copia local o revisar el modelo.
@@ -46,6 +46,8 @@ Entre envíos, logística y reportes no hay llaves: se relacionan por `tracking_
 y los datos viajan por eventos (RabbitMQ).
 Las recogidas se relacionan opcionalmente con envíos por `shipment_tracking_number`
 y su bitácora por `pickup_number`, sin llaves foráneas; tampoco hay FK a usuarios.
+Un envío solo puede estar vinculado a una recogida no cancelada; se permiten varias
+recogidas canceladas y recogidas sin envío. El hash del código de gestión es opcional.
 
 ## Tablas
 
@@ -53,7 +55,7 @@ y su bitácora por `pickup_number`, sin llaves foráneas; tampoco hay FK a usuar
 |---|---|---|
 | `cities` | `id` | Catálogo de ciudades (único por nombre + departamento) |
 | `shipments` | `id`, único `tracking_number` | Envío registrado: remitente, destinatario, estado |
-| `pickups` | `id`, único `pickup_number` | Solicitud de recogida, programación, asignación y datos de contacto |
+| `pickups` | `id`, único `pickup_number` | Solicitud de recogida, programación, asignación, contacto y hash opcional del código de gestión |
 | `pickup_events` | `id`, único `event_id` | Bitácora de cambios de cada recogida |
 | `pickup_outbox` | `pickup_number` | Eventos de custodia pendientes de confirmación por RabbitMQ |
 | `auth_users` | `username` | Usuarios con hash BCrypt y roles (`operador`, `administrador`) |
@@ -73,7 +75,7 @@ Extensión requerida: `unaccent` (búsqueda de ciudades y centros sin tildes, V9
 Las ejecuta **solo la API 1** con Flyway (`src/main/resources/db/migration`).
 Las APIs 2 y 3 arrancan con `spring.flyway.enabled=false` y
 `spring.jpa.hibernate.ddl-auto=validate`, así que la API 1 se despliega primero.
-Un cambio de esquema en cualquier tabla se hace como nueva migración (V24+) en el
+Un cambio de esquema en cualquier tabla se hace como nueva migración (V25+) en el
 repositorio de la API 1.
 
 | Versión | Cambio |
@@ -101,6 +103,19 @@ repositorio de la API 1.
 | V21 | Duración del tramo en despachos |
 | V22 | Registro anterior al primer movimiento (datos) |
 | V23 | Recogidas a domicilio y bitácora |
+| V24 | Código de gestión y unicidad de recogidas no canceladas por envío |
+
+Antes de aplicar V24 a una base existente, comprobar si hay envíos con varias
+recogidas no canceladas. La migración fallará si existen duplicados; resolverlos
+según el negocio sin borrar la bitácora antes de desplegar:
+
+```sql
+select shipment_tracking_number, count(*)
+from pickups
+where status <> 'CANCELLED' and shipment_tracking_number is not null
+group by shipment_tracking_number
+having count(*) > 1;
+```
 
 ## Conexión
 
